@@ -167,5 +167,95 @@ def predict_filtered():
     except Error as e:
         return jsonify({'error': str(e)}), 500
 
+@APP.route('/api/olap/cube', methods=['GET'])
+def olap_cube():
+    """Endpoint OLAP para análisis multidimensional"""
+    dimension = request.args.get('dimension', 'cliente')
+    metric = request.args.get('metric', 'ingresos')
+    year = request.args.get('year', 'all')
+    
+    try:
+        # Usar siempre SG_Proyectos
+        conn = mysql.connector.connect(**SG_DB)
+        cursor = conn.cursor(dictionary=True)
+        
+        # Construir query según dimensión
+        if dimension == 'cliente':
+            query = """
+                SELECT 
+                    p.cliente as label,
+                    COUNT(p.id_proyecto) as proyectos,
+                    COALESCE(SUM(p.presupuesto), 0) as ingresos,
+                    COALESCE(SUM(p.presupuesto), 0) as value,
+                    COUNT(d.id_defecto) as defectos
+                FROM Proyectos p
+                LEFT JOIN Defectos d ON p.id_proyecto = d.id_proyecto
+            """
+            where_clause = f" WHERE YEAR(p.fecha_inicio) = {year}" if year != 'all' else ""
+            query += where_clause + " GROUP BY p.cliente ORDER BY ingresos DESC"
+            
+        elif dimension == 'tiempo':
+            query = """
+                SELECT 
+                    DATE_FORMAT(p.fecha_inicio, '%Y-%m') as periodo,
+                    COUNT(p.id_proyecto) as proyectos,
+                    COALESCE(SUM(p.presupuesto), 0) as ingresos,
+                    COALESCE(SUM(p.presupuesto), 0) as value,
+                    COUNT(d.id_defecto) as defectos
+                FROM Proyectos p
+                LEFT JOIN Defectos d ON p.id_proyecto = d.id_proyecto
+            """
+            where_clause = f" WHERE YEAR(p.fecha_inicio) = {year}" if year != 'all' else ""
+            query += where_clause + " GROUP BY DATE_FORMAT(p.fecha_inicio, '%Y-%m') ORDER BY periodo"
+            
+        elif dimension == 'etapa':
+            query = """
+                SELECT 
+                    COALESCE(d.etapa_deteccion, 'Sin etapa') as etapa,
+                    COUNT(DISTINCT p.id_proyecto) as proyectos,
+                    COALESCE(SUM(p.presupuesto), 0) as ingresos,
+                    COUNT(d.id_defecto) as defectos,
+                    COUNT(d.id_defecto) as value
+                FROM Defectos d
+                INNER JOIN Proyectos p ON d.id_proyecto = p.id_proyecto
+            """
+            where_clause = f" WHERE YEAR(p.fecha_inicio) = {year}" if year != 'all' else ""
+            query += where_clause + " GROUP BY d.etapa_deteccion ORDER BY defectos DESC"
+            
+        elif dimension == 'tecnologia':
+            query = """
+                SELECT 
+                    p.metodologia as tecnologia,
+                    COUNT(p.id_proyecto) as proyectos,
+                    COALESCE(SUM(p.presupuesto), 0) as ingresos,
+                    COALESCE(SUM(p.presupuesto), 0) as value,
+                    COUNT(d.id_defecto) as defectos
+                FROM Proyectos p
+                LEFT JOIN Defectos d ON p.id_proyecto = d.id_proyecto
+            """
+            where_clause = f" WHERE YEAR(p.fecha_inicio) = {year}" if year != 'all' else ""
+            query += where_clause + " GROUP BY p.metodologia ORDER BY proyectos DESC"
+        else:
+            return jsonify({'error': 'Invalid dimension'}), 400
+        
+        cursor.execute(query)
+        results = cursor.fetchall()
+        
+        # Ajustar métrica si es necesario
+        if metric == 'cantidad':
+            for row in results:
+                row['value'] = row['proyectos']
+        elif metric == 'defectos':
+            for row in results:
+                row['value'] = row.get('defectos', 0)
+        
+        cursor.close()
+        conn.close()
+        
+        return jsonify(results if results else [])
+        
+    except Error as e:
+        return jsonify({'error': str(e), 'message': 'Database connection or query failed'}), 500
+
 if __name__ == '__main__':
     APP.run(host='0.0.0.0', port=5000, debug=True)
