@@ -9,7 +9,7 @@ from collections import defaultdict
 from rayleigh_model import fit_rayleigh, expected_value, percentile
 
 APP = Flask(__name__)
-CORS(APP, resources={r"/*": {"origins": ["http://localhost:3001", "http://localhost:3000", "http://localhost:5173"]}})
+CORS(APP, resources={r"/*": {"origins": ["http://localhost:3001", "http://localhost:3000", "http://localhost:3002", "http://localhost:5173"]}})
 
 MODEL_FILE = os.getenv('MODEL_FILE', 'rayleigh_model.json')
 RESP_KEY = os.getenv('RESP_KEY', 'changeme')
@@ -22,124 +22,150 @@ def load_model():
     if not os.path.exists(MODEL_FILE): return None
     with open(MODEL_FILE, 'r', encoding='utf-8') as f: return json.load(f)
 
-# --- RUTAS DE PREDICCIÓN (Tu lógica original intacta) ---
-@APP.route('/predict', methods=['POST'])
-def predict():
-    # ... (Tu código original de predicción va aquí, sin cambios) ...
-    # Para ahorrar espacio en la respuesta, asumo que mantienes tu código de predicción
-    # Si lo necesitas completo, avísame.
-    pass 
+def _build_filters_sql(filters):
+    """Construye cláusula WHERE basada en filtros del frontend"""
+    where = []
+    params = []
+    
+    if 'metodologia' in filters and filters.get('metodologia'):
+        where.append('p.metodologia = %s')
+        params.append(filters['metodologia'])
+    
+    if 'horas_invertidas_min' in filters and filters.get('horas_invertidas_min'):
+        where.append('p.horas_invertidas >= %s')
+        params.append(int(filters['horas_invertidas_min']))
+    if 'horas_invertidas_max' in filters and filters.get('horas_invertidas_max'):
+        where.append('p.horas_invertidas <= %s')
+        params.append(int(filters['horas_invertidas_max']))
+    
+    if 'presupuesto_min' in filters and filters.get('presupuesto_min'):
+        where.append('p.presupuesto >= %s')
+        params.append(float(filters['presupuesto_min']))
+    if 'presupuesto_max' in filters and filters.get('presupuesto_max'):
+        where.append('p.presupuesto <= %s')
+        params.append(float(filters['presupuesto_max']))
+    
+    if 'duracion_dias_min' in filters and filters.get('duracion_dias_min'):
+        where.append('DATEDIFF(p.fecha_fin, p.fecha_inicio) >= %s')
+        params.append(int(filters['duracion_dias_min']))
+    if 'duracion_dias_max' in filters and filters.get('duracion_dias_max'):
+        where.append('DATEDIFF(p.fecha_fin, p.fecha_inicio) <= %s')
+        params.append(int(filters['duracion_dias_max']))
+    
+    if 'estado' in filters and filters.get('estado'):
+        if isinstance(filters['estado'], list):
+            placeholders = ','.join(['%s'] * len(filters['estado']))
+            where.append(f"p.estado IN ({placeholders})")
+            params.extend(filters['estado'])
+        else:
+            where.append('p.estado = %s')
+            params.append(filters['estado'])
+    
+    if 'entregables_count_min' in filters and filters.get('entregables_count_min'):
+        where.append('p.entregables_count >= %s')
+        params.append(int(filters['entregables_count_min']))
+    if 'entregables_count_max' in filters and filters.get('entregables_count_max'):
+        where.append('p.entregables_count <= %s')
+        params.append(int(filters['entregables_count_max']))
+    
+    if 'num_tecnologias_emergentes_min' in filters and filters.get('num_tecnologias_emergentes_min'):
+        where.append('p.num_tecnologias_emergentes >= %s')
+        params.append(int(filters['num_tecnologias_emergentes_min']))
+    if 'num_tecnologias_emergentes_max' in filters and filters.get('num_tecnologias_emergentes_max'):
+        where.append('p.num_tecnologias_emergentes <= %s')
+        params.append(int(filters['num_tecnologias_emergentes_max']))
+    
+    clause = ('AND ' + ' AND '.join(where)) if where else ''
+    return clause, params
 
-# ... (Funciones auxiliares _build_filters_sql y predict_filtered también van aquí) ...
-# Pega aquí tus funciones _build_filters_sql y predict_filtered del archivo anterior.
-
-# --- RUTA OLAP (LA CORRECCIÓN IMPORTANTE) ---
-@APP.route('/api/olap/cube', methods=['GET'])
-def olap_cube():
-    dimension = request.args.get('dimension', 'tiempo')
-    metric = request.args.get('metric', 'cantidad')
-    year_filter = request.args.get('year', 'all')
+@APP.route('/predict_filtered', methods=['POST'])
+def predict_filtered():
+    """Aplica filtros desde frontend, consulta SG_Proyectos y ajusta Rayleigh dinámicamente"""
+    auth = request.headers.get('Authorization') or (request.json.get('auth_key') if request.is_json else None)
+    if auth is None or auth != RESP_KEY:
+        abort(401, 'Unauthorized: missing or invalid auth key')
+    
+    filters = request.json.get('filters') if request.is_json else None
+    clause, params = _build_filters_sql(filters)
     
     try:
-        conn = mysql.connector.connect(**DSS_DB)
-        cursor = conn.cursor(dictionary=True)
+        conn = mysql.connector.connect(**SG_DB)
+        cursor = conn.cursor()
         
-        year_clause = ""
-        params = []
-        if year_filter != 'all':
-            year_clause = " AND t.anio = %s "
-            params.append(year_filter)
-
-        # 1. TIEMPO
-        if dimension == 'tiempo':
-            if metric == 'defectos':
-                # Conteo real desde Fact_Defectos
-                query = f"""
-                    SELECT CONCAT('Q', t.trimestre, '-', t.anio) as periodo,
-                           CAST(COUNT(fd.id_fact_defecto) AS FLOAT) as value,
-                           CAST(COUNT(DISTINCT fd.id_proyecto) AS FLOAT) as proyectos,
-                           0 as ingresos
-                    FROM Fact_Defectos fd
-                    JOIN Dim_Tiempo t ON fd.id_tiempo = t.id_tiempo
-                    WHERE 1=1 {year_clause}
-                    GROUP BY t.anio, t.trimestre
-                    ORDER BY t.anio, t.trimestre
-                """
-            else:
-                metric_sql = "CAST(COUNT(fp.id_proyecto) AS FLOAT)"
-                if metric == 'ingresos': metric_sql = "CAST(SUM(fp.costo_total) AS FLOAT)"
-                query = f"""
-                    SELECT CONCAT('Q', t.trimestre, '-', t.anio) as periodo,
-                           {metric_sql} as value,
-                           CAST(SUM(fp.costo_total) AS FLOAT) as ingresos,
-                           CAST(COUNT(fp.id_proyecto) AS FLOAT) as proyectos
-                    FROM Fact_Proyectos fp
-                    JOIN Dim_Tiempo t ON fp.id_tiempo = t.id_tiempo
-                    WHERE 1=1 {year_clause}
-                    GROUP BY t.anio, t.trimestre
-                    ORDER BY t.anio, t.trimestre
-                """
+        query = f"""
+            SELECT 
+                p.id_proyecto,
+                p.nombre,
+                p.metodologia,
+                p.fecha_inicio,
+                p.fecha_fin,
+                d.fecha_deteccion,
+                FLOOR(DATEDIFF(d.fecha_deteccion, p.fecha_inicio) / 7) AS semana
+            FROM Proyectos p
+            INNER JOIN Defectos d ON p.id_proyecto = d.id_proyecto
+            WHERE d.fecha_deteccion >= p.fecha_inicio
+            {clause}
+            ORDER BY semana
+        """
         
-        # 2. CLIENTE (Top 10 Pareto)
-        elif dimension == 'cliente':
-            metric_col = "CAST(COUNT(fp.id_proyecto) AS FLOAT)"
-            if metric == 'ingresos': metric_col = "CAST(SUM(fp.costo_total) AS FLOAT)"
-            
-            query = f"""
-                SELECT c.nombre as label,
-                       {metric_col} as value,
-                       CAST(COUNT(fp.id_proyecto) AS FLOAT) as proyectos,
-                       CAST(SUM(fp.costo_total) AS FLOAT) as ingresos
-                FROM Fact_Proyectos fp
-                JOIN Dim_Cliente c ON fp.id_cliente = c.id_cliente
-                JOIN Dim_Tiempo t ON fp.id_tiempo = t.id_tiempo
-                WHERE 1=1 {year_clause}
-                GROUP BY c.nombre
-                ORDER BY value DESC
-                LIMIT 15
-            """
-        
-        # 3. ETAPA (Rayleigh)
-        elif dimension == 'etapa':
-             query = f"""
-                SELECT fd.etapa_deteccion as etapa,
-                       CAST(COUNT(*) AS FLOAT) as value,
-                       CAST(COUNT(*) AS FLOAT) as cantidad_defectos,
-                       0 as ingresos, 0 as proyectos
-                FROM Fact_Defectos fd
-                LEFT JOIN Dim_Tiempo t ON fd.id_tiempo = t.id_tiempo
-                WHERE fd.etapa_deteccion IS NOT NULL {year_clause}
-                GROUP BY fd.etapa_deteccion
-                ORDER BY FIELD(fd.etapa_deteccion, 'Inicio', 'Planificación', 'Etapa 1', 'Etapa 2', 'Etapa 3', 'Etapa 4', 'Etapa 5', 'Ejecución', 'Cierre')
-            """
-
-        # 4. TECNOLOGIA
-        elif dimension == 'tecnologia':
-            metric_col = "CAST(COUNT(*) AS FLOAT)"
-            if metric == 'ingresos': metric_col = "CAST(SUM(fp.costo_total) AS FLOAT)"
-            query = f"""
-                SELECT p.metodologia as tecnologia, 
-                       {metric_col} as value,
-                       CAST(COUNT(fp.id_proyecto) AS FLOAT) as proyectos,
-                       CAST(SUM(fp.costo_total) AS FLOAT) as ingresos
-                FROM Fact_Proyectos fp
-                JOIN Dim_Proyecto p ON fp.id_proyecto = p.id_proyecto
-                JOIN Dim_Tiempo t ON fp.id_tiempo = t.id_tiempo
-                WHERE 1=1 {year_clause}
-                GROUP BY p.metodologia
-                ORDER BY value DESC
-            """
-
         cursor.execute(query, params)
-        data = cursor.fetchall()
-        return jsonify(data)
-
+        rows = cursor.fetchall()
+        
+        if not rows:
+            return jsonify({'error': 'No matching data found with those filters'}), 404
+        
+        # Extraer muestras (semanas) y contar defectos por semana
+        samples = [row[6] for row in rows if row[6] is not None and row[6] >= 0]
+        if not samples:
+            return jsonify({'error': 'No valid time samples'}), 400
+        
+        # Ajustar modelo Rayleigh
+        sigma, n, mean_sq = fit_rayleigh(samples)
+        exp_val = expected_value(sigma)
+        p90 = percentile(sigma, 0.90)
+        
+        # Información de proyectos y metodologías
+        proyectos_info = [(row[0], row[2]) for row in rows]
+        proyectos_unicos = len(set([pid for pid, _ in proyectos_info]))
+        metodologias_usadas = list(set([m for _, m in proyectos_info]))
+        
+        # Calcular duración en semanas
+        max_semana = max(samples)
+        duracion_semanas = max_semana + 1
+        
+        # Construir información detallada para el frontend con defectos acumulados
+        defectos_por_semana = defaultdict(int)
+        for s in samples:
+            defectos_por_semana[s] += 1
+        
+        tiempo_info = []
+        defectos_acumulados = 0
+        for i in range(max_semana + 1):
+            defectos_en_semana = defectos_por_semana.get(i, 0)
+            defectos_acumulados += defectos_en_semana
+            tiempo_info.append({
+                'tiempo': i,
+                'defectos_esperados': defectos_en_semana,
+                'defectos_acumulados': defectos_acumulados
+            })
+        
+        result = {
+            'sigma': round(sigma, 2),
+            'n_samples': n,
+            'expected_defects': round(exp_val, 2),
+            'p90': round(p90, 2),
+            'proyectos_analizados': proyectos_unicos,
+            'metodologias': metodologias_usadas,
+            'duracion_semanas': duracion_semanas,
+            'tiempo_data': tiempo_info
+        }
+        
+        cursor.close()
+        conn.close()
+        return jsonify(result)
+        
     except Error as e:
-        print(f"Error: {e}")
-        return jsonify({"error": str(e)}), 500
-    finally:
-        if 'cursor' in locals(): cursor.close()
-        if 'conn' in locals(): conn.close()
+        return jsonify({'error': str(e)}), 500
 
 if __name__ == '__main__':
     APP.run(host='0.0.0.0', port=5000, debug=True)

@@ -179,36 +179,14 @@ export default function PredictiveModel() {
         </div>
       </div>
 
-      {/* Info Banner */}
-      <div className="card bg-blue-50 dark:bg-blue-900/20 border-l-4 border-blue-600">
-        <div className="flex items-start">
-          <Info className="h-5 w-5 text-blue-600 mr-2 flex-shrink-0 mt-0.5" />
-          <div>
-            <h3 className="text-sm font-semibold text-blue-900 dark:text-blue-100 mb-1">
-              Modelo Predictivo Basado en Proyectos Históricos
-            </h3>
-            <p className="text-xs text-blue-800 dark:text-blue-200">
-              Este modelo usa la distribución de Rayleigh aplicada al historial de defectos de proyectos 
-              similares en tu base de datos. Proporciona características del proyecto para encontrar proyectos 
-              comparables y obtener una predicción precisa de defectos esperados por semana.
-            </p>
-          </div>
-        </div>
-      </div>
-
       {/* Input Form */}
       <div className="card">
-        <div className="flex items-center mb-4">
-          <Search className="h-5 w-5 text-primary-600 mr-2" />
-          <h3 className="text-base font-semibold text-gray-900 dark:text-white">
-            Características del Proyecto a Predecir
-          </h3>
-        </div>
-        
         {/* Filtros Principales */}
-        <div className="mb-4">
-          <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Filtros Principales</h4>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+        <details open className="mb-4">
+          <summary className="cursor-pointer text-sm font-medium text-gray-700 dark:text-gray-300 hover:text-primary-600 mb-2">
+            Filtros de Búsqueda
+          </summary>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 mt-2">
             <div>
               <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
                 Metodología *
@@ -306,7 +284,7 @@ export default function PredictiveModel() {
               <p className="mt-0.5 text-xs text-gray-500">Presupuesto mínimo (USD)</p>
             </div>
           </div>
-        </div>
+        </details>
 
         {/* Filtros Avanzados */}
         <details className="mb-4">
@@ -386,34 +364,6 @@ export default function PredictiveModel() {
             </div>
           </div>
         </details>
-
-        {/* Ejemplo rápido */}
-        <div className="bg-gray-50 dark:bg-gray-800 p-3 rounded-lg mb-4">
-          <p className="text-xs font-medium text-gray-700 dark:text-gray-300 mb-2">
-            💡 Ejemplo: Proyecto Scrum de tamaño medio
-          </p>
-          <button
-            onClick={() => {
-              setFilters({
-                metodologia: 'Scrum',
-                horas_invertidas_min: '2500',
-                horas_invertidas_max: '3500',
-                presupuesto_min: '50000',
-                presupuesto_max: '150000',
-                duracion_dias_min: '90',
-                duracion_dias_max: '180',
-                entregables_count_min: '8',
-                entregables_count_max: '15',
-                num_tecnologias_emergentes_min: '',
-                num_tecnologias_emergentes_max: '',
-                estado: ['Completado']
-              })
-            }}
-            className="text-xs text-primary-600 hover:text-primary-700 font-medium"
-          >
-            Cargar este ejemplo →
-          </button>
-        </div>
 
         {error && (
           <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-3 mb-4">
@@ -626,102 +576,6 @@ export default function PredictiveModel() {
             </div>
             <p className="text-xs text-gray-600 dark:text-gray-400 mt-2 text-center">
               📊 Modelo compatible con todas las metodologías (Scrum, Waterfall, Kanban, RUP, XP, DevOps)
-            </p>
-          </div>
-
-          {/* Visual Distribution Chart */}
-          <div className="card">
-            <div className="flex items-center mb-3">
-              <BarChart2 className="h-5 w-5 text-primary-600 mr-2" />
-              <h3 className="text-base font-semibold text-gray-900 dark:text-white">
-                Distribución Visual de Riesgo
-              </h3>
-            </div>
-            
-            {/* Risk Gauge */}
-            <div className="mb-4">
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Nivel de Riesgo del Proyecto</span>
-                <span className={`text-sm font-bold ${
-                  predictionData.riskLevel === 'alto' ? 'text-red-600' :
-                  predictionData.riskLevel === 'medio' ? 'text-yellow-600' :
-                  'text-green-600'
-                }`}>
-                  {predictionData.riskLevel.toUpperCase()}
-                </span>
-              </div>
-              <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-8 relative overflow-hidden">
-                <div className="absolute inset-0 flex">
-                  <div className="w-1/3 bg-green-500 opacity-20"></div>
-                  <div className="w-1/3 bg-yellow-500 opacity-20"></div>
-                  <div className="w-1/3 bg-red-500 opacity-20"></div>
-                </div>
-                <div 
-                  className={`h-full flex items-center justify-end pr-2 transition-all duration-500 ${
-                    predictionData.riskLevel === 'alto' ? 'bg-gradient-to-r from-red-500 to-red-600' :
-                    predictionData.riskLevel === 'medio' ? 'bg-gradient-to-r from-yellow-500 to-yellow-600' :
-                    'bg-gradient-to-r from-green-500 to-green-600'
-                  }`}
-                  style={{ 
-                    width: predictionData.riskLevel === 'alto' ? '90%' : 
-                           predictionData.riskLevel === 'medio' ? '60%' : '30%' 
-                  }}
-                >
-                  <AlertCircle className="h-4 w-4 text-white" />
-                </div>
-              </div>
-              <div className="flex justify-between text-xs text-gray-500 dark:text-gray-400 mt-1">
-                <span>Bajo</span>
-                <span>Medio</span>
-                <span>Alto</span>
-              </div>
-            </div>
-
-            {/* Defect Distribution Bar */}
-            <div className="h-48">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={[
-                  { fase: `Inicio\n(0-${Math.floor(predictionData.peakWeek / 3)})`, defectos: predictionData.expected_defects * 0.7, fill: '#10B981' },
-                  { fase: `Desarrollo\n(${Math.floor(predictionData.peakWeek / 3)}-${predictionData.peakWeek + 2})`, defectos: predictionData.expected_defects * 1.5, fill: '#F59E0B' },
-                  { fase: `Cierre\n(${predictionData.peakWeek + 2}+)`, defectos: predictionData.expected_defects * 0.4, fill: '#3B82F6' }
-                ]}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#374151" opacity={0.1} />
-                  <XAxis 
-                    dataKey="fase" 
-                    stroke="#6B7280" 
-                    fontSize={10}
-                    interval={0}
-                    angle={0}
-                    textAnchor="middle"
-                  />
-                  <YAxis 
-                    stroke="#6B7280" 
-                    fontSize={11}
-                    label={{ value: 'Defectos/Semana', angle: -90, position: 'insideLeft', fontSize: 11 }}
-                  />
-                  <Tooltip 
-                    contentStyle={{ 
-                      backgroundColor: 'rgba(17, 24, 39, 0.9)', 
-                      border: '1px solid #374151',
-                      borderRadius: '8px',
-                      fontSize: '12px'
-                    }}
-                    formatter={(value) => [value.toFixed(2), 'Defectos/Semana']}
-                  />
-                  <Bar dataKey="defectos" radius={[8, 8, 0, 0]}>
-                    {[
-                      { fill: '#10B981' },
-                      { fill: '#F59E0B' },
-                      { fill: '#3B82F6' }
-                    ].map((entry, index) => (
-                      <Bar key={`cell-${index}`} fill={entry.fill} />
-                    ))}
-                  </Bar>
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-            <p className="text-xs text-gray-600 dark:text-gray-400 mt-2 text-center">
-              💡 Distribución estimada de defectos por fase del proyecto
             </p>
           </div>
         </>

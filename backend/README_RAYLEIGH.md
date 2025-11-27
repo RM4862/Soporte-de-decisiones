@@ -2,19 +2,25 @@
 
 ## Descripción General
 
-Este sistema implementa un modelo predictivo basado en la distribución Rayleigh para predecir defectos en proyectos de software usando **etapas del ciclo de vida como tiempo**.
+Este sistema implementa un **Modelo Predictivo Basado en Proyectos Históricos** que utiliza la distribución de Rayleigh para predecir defectos en proyectos de software.
 
-### Concepto Clave: Etapas como Tiempo
+### ¿Qué es este modelo?
 
-En lugar de usar tiempo calendario, el modelo usa las **etapas del proyecto** como eje temporal:
+Este modelo usa la distribución de Rayleigh aplicada al **historial de defectos de proyectos similares** en tu base de datos. Al proporcionar características del proyecto actual (metodología, horas invertidas, presupuesto, etc.), el sistema encuentra proyectos comparables en el historial y genera una predicción precisa de **defectos esperados por semana**.
 
-1. **Inicio** (t=1)
-2. **Planificación** (t=2)
-3. **Ejecución** (t=3) ← Pico de defectos
-4. **Monitoreo y Control** (t=4)
-5. **Cierre** (t=5)
+### Concepto Clave: Tiempo Calendario (Metodología-Agnóstico)
 
-La distribución Rayleigh modela cómo los defectos se concentran en la etapa de **Ejecución** y disminuyen hacia el inicio y cierre del proyecto.
+El modelo utiliza **tiempo calendario en semanas** desde el inicio del proyecto, lo que lo hace compatible con **cualquier metodología**:
+
+- **Scrum** (sprints iterativos)
+- **Waterfall** (fases secuenciales - Cascada)
+- **Kanban** (flujo continuo)
+- **RUP** (inception, elaboration, construction, transition)
+- **XP** (releases e iteraciones cortas)
+- **DevOps** (CI/CD continuo)
+- **Agile** (enfoques ágiles genéricos)
+
+La distribución Rayleigh modela cómo los defectos se concentran en las **semanas centrales del proyecto** (fase de desarrollo intensivo) y disminuyen hacia el inicio y cierre.
 
 ## Arquitectura del Sistema
 
