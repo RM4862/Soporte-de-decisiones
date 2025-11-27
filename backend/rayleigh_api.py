@@ -257,5 +257,176 @@ def olap_cube():
     except Error as e:
         return jsonify({'error': str(e), 'message': 'Database connection or query failed'}), 500
 
+@APP.route('/api/dashboard/summary', methods=['GET'])
+def dashboard_summary():
+    """Endpoint para datos del dashboard principal"""
+    try:
+        conn = mysql.connector.connect(**SG_DB)
+        cursor = conn.cursor(dictionary=True)
+        
+        # KPI 1: Proyectos Activos
+        cursor.execute("""
+            SELECT COUNT(*) as total 
+            FROM Proyectos 
+            WHERE estado IN ('En Desarrollo', 'Testing', 'En Progreso')
+        """)
+        proyectos_activos = cursor.fetchone()['total']
+        
+        # Cambio vs mes anterior
+        cursor.execute("""
+            SELECT COUNT(*) as total
+            FROM Proyectos
+            WHERE estado IN ('En Desarrollo', 'Testing', 'En Progreso')
+            AND fecha_inicio >= DATE_SUB(CURDATE(), INTERVAL 2 MONTH)
+            AND fecha_inicio < DATE_SUB(CURDATE(), INTERVAL 1 MONTH)
+        """)
+        proyectos_mes_anterior = cursor.fetchone()['total'] or 1
+        cambio_proyectos = round(((proyectos_activos - proyectos_mes_anterior) / proyectos_mes_anterior) * 100)
+        
+        # KPI 2: Ingresos del mes actual
+        cursor.execute("""
+            SELECT COALESCE(SUM(presupuesto), 0) as total
+            FROM Proyectos
+            WHERE YEAR(fecha_inicio) = YEAR(CURDATE())
+            AND MONTH(fecha_inicio) = MONTH(CURDATE())
+        """)
+        ingresos = cursor.fetchone()['total']
+        
+        # Cambio ingresos vs mes anterior
+        cursor.execute("""
+            SELECT COALESCE(SUM(presupuesto), 0) as total
+            FROM Proyectos
+            WHERE fecha_inicio >= DATE_SUB(CURDATE(), INTERVAL 2 MONTH)
+            AND fecha_inicio < DATE_SUB(CURDATE(), INTERVAL 1 MONTH)
+        """)
+        ingresos_anterior = cursor.fetchone()['total'] or 1
+        cambio_ingresos = round(((ingresos - ingresos_anterior) / ingresos_anterior) * 100)
+        
+        # KPI 3: Satisfacción promedio
+        cursor.execute("""
+            SELECT COALESCE(AVG(calificacion), 4.2) as promedio
+            FROM evaluaciones_cliente
+            WHERE fecha >= DATE_SUB(CURDATE(), INTERVAL 3 MONTH)
+        """)
+        satisfaccion = cursor.fetchone()['promedio']
+        
+        # KPI 4: Defectos críticos activos
+        cursor.execute("""
+            SELECT COUNT(*) as total
+            FROM Defectos
+            WHERE severidad = 'Crítico'
+            AND estado = 'Abierto'
+        """)
+        defectos_criticos = cursor.fetchone()['total']
+        
+        # Cambio defectos
+        cursor.execute("""
+            SELECT COUNT(*) as total
+            FROM Defectos
+            WHERE severidad = 'Crítico'
+            AND fecha_deteccion >= DATE_SUB(CURDATE(), INTERVAL 2 MONTH)
+            AND fecha_deteccion < DATE_SUB(CURDATE(), INTERVAL 1 MONTH)
+        """)
+        defectos_anterior = cursor.fetchone()['total'] or 1
+        cambio_defectos = round(((defectos_criticos - defectos_anterior) / defectos_anterior) * 100)
+        
+        # Proyectos por mes (últimos 6 meses)
+        cursor.execute("""
+            SELECT 
+                DATE_FORMAT(fecha_inicio, '%b') as name,
+                COUNT(*) as proyectos,
+                SUM(CASE WHEN estado = 'Completado' THEN 1 ELSE 0 END) as completados
+            FROM Proyectos
+            WHERE fecha_inicio >= DATE_SUB(CURDATE(), INTERVAL 6 MONTH)
+            GROUP BY YEAR(fecha_inicio), MONTH(fecha_inicio)
+            ORDER BY fecha_inicio
+        """)
+        proyectos_mes = cursor.fetchall()
+        
+        # Defectos por severidad (activos)
+        cursor.execute("""
+            SELECT 
+                severidad as name,
+                COUNT(*) as value,
+                CASE severidad
+                    WHEN 'Crítico' THEN '#ef4444'
+                    WHEN 'Mayor' THEN '#f59e0b'
+                    WHEN 'Menor' THEN '#10b981'
+                    WHEN 'Cosmético' THEN '#6366f1'
+                END as color
+            FROM Defectos
+            WHERE estado = 'Abierto'
+            GROUP BY severidad
+            ORDER BY 
+                CASE severidad
+                    WHEN 'Crítico' THEN 1
+                    WHEN 'Mayor' THEN 2
+                    WHEN 'Menor' THEN 3
+                    WHEN 'Cosmético' THEN 4
+                END
+        """)
+        defectos_severidad = cursor.fetchall()
+        
+        # Proyectos recientes (últimos 5)
+        cursor.execute("""
+            SELECT 
+                p.nombre as proyecto,
+                c.nombre as cliente,
+                p.estado,
+                CASE 
+                    WHEN p.fecha_fin IS NULL OR p.fecha_inicio IS NULL THEN 0
+                    WHEN DATEDIFF(p.fecha_fin, p.fecha_inicio) = 0 THEN 100
+                    ELSE LEAST(100, GREATEST(0, ROUND((DATEDIFF(CURDATE(), p.fecha_inicio) / 
+                           DATEDIFF(p.fecha_fin, p.fecha_inicio)) * 100)))
+                END as progreso
+            FROM Proyectos p
+            LEFT JOIN Clientes c ON p.id_cliente = c.id_cliente
+            ORDER BY p.fecha_inicio DESC
+            LIMIT 5
+        """)
+        proyectos_recientes = cursor.fetchall()
+        
+        cursor.close()
+        conn.close()
+        
+        return jsonify({
+            'kpis': {
+                'proyectos_activos': {
+                    'value': proyectos_activos,
+                    'change': cambio_proyectos,
+                    'trend': 'up' if cambio_proyectos >= 0 else 'down'
+                },
+                'ingresos_mensuales': {
+                    'value': ingresos,
+                    'change': cambio_ingresos,
+                    'trend': 'up' if cambio_ingresos >= 0 else 'down'
+                },
+                'satisfaccion': {
+                    'value': round(satisfaccion, 1),
+                    'change': 5,  # Placeholder, podrías calcular vs periodo anterior
+                    'trend': 'up'
+                },
+                'defectos_criticos': {
+                    'value': defectos_criticos,
+                    'change': cambio_defectos,
+                    'trend': 'down' if cambio_defectos <= 0 else 'up'
+                }
+            },
+            'proyectos_mes': proyectos_mes,
+            'defectos_severidad': defectos_severidad,
+            'proyectos_recientes': proyectos_recientes
+        })
+        
+    except Error as e:
+        return jsonify({'error': str(e), 'message': 'Database query failed'}), 500
+
 if __name__ == '__main__':
-    APP.run(host='0.0.0.0', port=5000, debug=True)
+    print("🚀 Starting Flask server on port 5000...")
+    try:
+        APP.run(host='0.0.0.0', port=5000, debug=False, use_reloader=False)
+    except KeyboardInterrupt:
+        print("\n👋 Server stopped")
+    except Exception as e:
+        print(f"❌ Error: {e}")
+        import traceback
+        traceback.print_exc()
