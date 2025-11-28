@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { ArrowUpRight, ArrowDownRight, Users, DollarSign, TrendingUp, AlertCircle, RefreshCw } from 'lucide-react'
 import { BarChart, Bar, LineChart, Line, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts'
 
-const API_URL = 'http://localhost:5000'
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000'
 
 export default function Dashboard() {
   const [dashboardData, setDashboardData] = useState(null)

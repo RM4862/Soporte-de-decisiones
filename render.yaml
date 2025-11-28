@@ -1,0 +1,51 @@
+services:
+  # Backend API (Python/Flask)
+  - type: web
+    name: soporte-decisiones-api
+    runtime: python
+    region: oregon
+    plan: free
+    buildCommand: "cd backend && pip install -r ../requirements.txt"
+    startCommand: "cd backend && gunicorn --bind 0.0.0.0:$PORT --workers 2 --timeout 120 rayleigh_api:APP"
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.0
+      - key: PYTHONUNBUFFERED
+        value: 1
+      - key: SG_HOST
+        sync: false
+      - key: SG_USER
+        sync: false
+      - key: SG_PASSWORD
+        sync: false
+      - key: SG_DATABASE
+        value: SG_Proyectos
+      - key: DW_HOST
+        sync: false
+      - key: DW_USER
+        sync: false
+      - key: DW_PASSWORD
+        sync: false
+      - key: DW_DATABASE
+        value: DSS_Proyectos
+      - key: MODEL_FILE
+        value: rayleigh_model.json
+      - key: RESP_KEY
+        sync: false
+    healthCheckPath: /api/dashboard/summary
+
+  # Frontend (React/Vite)
+  - type: web
+    name: soporte-decisiones-frontend
+    runtime: static
+    region: oregon
+    plan: free
+    buildCommand: "cd frontend && npm install && npm run build"
+    staticPublishPath: frontend/dist
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
+    envVars:
+      - key: NODE_VERSION
+        value: 18.17.0

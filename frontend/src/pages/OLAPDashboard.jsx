@@ -34,7 +34,8 @@ export default function OLAPDashboard() {
     setLoading(true); setError(null);
     try {
       const params = new URLSearchParams({ dimension: selectedDimension, metric: selectedMetric, year: selectedPeriod })
-      const res = await fetch(`http://localhost:5000/api/olap/cube?${params}`)
+      const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000'
+      const res = await fetch(`${API_URL}/api/olap/cube?${params}`)
       if (!res.ok) throw new Error('Error API')
       const data = await res.json()
       setChartData(data)

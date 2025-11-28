@@ -3,7 +3,7 @@ import { Calculator, Lock, TrendingUp, AlertCircle, Info, FileText, Search, Data
 import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, ReferenceLine, Area, AreaChart } from 'recharts'
 
 // Configuración del API Backend
-const API_URL = 'http://localhost:5000'
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000'
 const AUTH_KEY = 'changeme'
 
 export default function PredictiveModel() {
