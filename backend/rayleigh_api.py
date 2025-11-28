@@ -15,8 +15,18 @@ MODEL_FILE = os.getenv('MODEL_FILE', 'rayleigh_model.json')
 RESP_KEY = os.getenv('RESP_KEY', 'changeme')
 
 # CONFIGURACIÓN DB
-SG_DB = {'host': 'localhost', 'user': 'root', 'password': '', 'database': 'SG_Proyectos'}
-DSS_DB = {'host': 'localhost', 'user': 'root', 'password': '', 'database': 'DSS_Proyectos'}
+SG_DB = {
+    'host': os.getenv('SG_HOST', 'localhost'),
+    'user': os.getenv('SG_USER', 'root'),
+    'password': os.getenv('SG_PASSWORD', ''),
+    'database': os.getenv('SG_DATABASE', 'SG_Proyectos')
+}
+DSS_DB = {
+    'host': os.getenv('DW_HOST', 'localhost'),
+    'user': os.getenv('DW_USER', 'root'),
+    'password': os.getenv('DW_PASSWORD', ''),
+    'database': os.getenv('DW_DATABASE', 'DSS_Proyectos')
+}
 
 def load_model():
     if not os.path.exists(MODEL_FILE): return None

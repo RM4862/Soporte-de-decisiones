@@ -18,9 +18,9 @@ FILES = {
 
 # --- CONFIGURACIÓN DE BASE DE DATOS ---
 DB_CONFIG = {
-    'host': 'localhost',
-    'user': 'root',
-    'password': '' # Agrega tu contraseña si es necesaria
+    'host': os.getenv('SG_HOST', 'localhost'),
+    'user': os.getenv('SG_USER', 'root'),
+    'password': os.getenv('SG_PASSWORD', '')
 }
 
 def print_header(msg):

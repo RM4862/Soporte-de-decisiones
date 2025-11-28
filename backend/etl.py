@@ -1,13 +1,14 @@
 import mysql.connector
 from mysql.connector import Error
 from datetime import datetime, date, timedelta
+import os
 
 # --- CONFIGURACIÓN DE LA BASE DE DATOS ---
 DB_CONFIG = {
-    'host': 'localhost',
-    'user': 'root',
-    'password': '',
-    'database': 'SG_Proyectos'
+    'host': os.getenv('SG_HOST', 'localhost'),
+    'user': os.getenv('SG_USER', 'root'),
+    'password': os.getenv('SG_PASSWORD', ''),
+    'database': os.getenv('SG_DATABASE', 'SG_Proyectos')
 }
 
 class ETLProcessor:
